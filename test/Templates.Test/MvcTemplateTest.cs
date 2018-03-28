@@ -14,12 +14,18 @@ namespace Templates.Test
         }
 
         [ConditionalTheory]
-        [OSSkipCondition(OperatingSystems.Linux)]
-        [OSSkipCondition(OperatingSystems.MacOSX)]
+        [OSSkipCondition(OperatingSystems.Linux | OperatingSystems.MacOSX)]
         [InlineData(null)]
         [InlineData("F#", Skip = "https://github.com/aspnet/templating/issues/365")]
         public void MvcTemplate_NoAuth_Works_NetFramework(string languageOverride)
             => MvcTemplate_NoAuthImpl("net461", languageOverride);
+
+        [ConditionalTheory]
+        [OSSkipCondition(OperatingSystems.Linux | OperatingSystems.MacOSX)]
+        [InlineData(null)]
+        [InlineData("F#", Skip = "https://github.com/aspnet/templating/issues/365")]
+        public void MvcTemplate_NoAuth_NoHttps_Works_NetFramework(string languageOverride)
+            => MvcTemplate_NoAuthImpl("net471", languageOverride, true);
 
         [Theory]
         [InlineData(null)]
@@ -27,9 +33,9 @@ namespace Templates.Test
         public void MvcTemplate_NoAuth_Works_NetCore(string languageOverride)
             => MvcTemplate_NoAuthImpl(null, languageOverride: languageOverride);
 
-        private void MvcTemplate_NoAuthImpl(string targetFrameworkOverride, string languageOverride)
+        private void MvcTemplate_NoAuthImpl(string targetFrameworkOverride, string languageOverride, bool noHttps = false)
         {
-            RunDotNetNew("mvc", targetFrameworkOverride, language: languageOverride);
+            RunDotNetNew("mvc", targetFrameworkOverride, language: languageOverride, noHttps: noHttps);
 
             AssertDirectoryExists("Areas", false);
             AssertDirectoryExists("Extensions", false);
@@ -44,6 +50,18 @@ namespace Templates.Test
             Assert.DoesNotContain("Microsoft.EntityFrameworkCore.Tools.DotNet", projectFileContents);
             Assert.DoesNotContain("Microsoft.Extensions.SecretManager.Tools", projectFileContents);
 
+            if (targetFrameworkOverride != null)
+            {
+                if (noHttps)
+                {
+                    Assert.DoesNotContain("Microsoft.AspNetCore.HttpsPolicy", projectFileContents);
+                }
+                else
+                {
+                    Assert.Contains("Microsoft.AspNetCore.HttpsPolicy", projectFileContents);
+                }
+            }
+
             foreach (var publish in new[] { false, true })
             {
                 using (var aspNetProcess = StartAspNetProcess(targetFrameworkOverride, publish))
@@ -56,10 +74,14 @@ namespace Templates.Test
         }
 
         [ConditionalFact(Skip = "https://github.com/aspnet/templating/issues/378")]
-        [OSSkipCondition(OperatingSystems.Linux)]
-        [OSSkipCondition(OperatingSystems.MacOSX)]
+        [OSSkipCondition(OperatingSystems.Linux | OperatingSystems.MacOSX)]
         public void MvcTemplate_IndividualAuth_Works_NetFramework()
             => MvcTemplate_IndividualAuthImpl("net461");
+
+        [ConditionalFact(Skip = "https://github.com/aspnet/templating/issues/378")]
+        [OSSkipCondition(OperatingSystems.Linux | OperatingSystems.MacOSX)]
+        public void MvcTemplate_WithIndividualAuth_NoHttpsSetToTrue_UsesHttps_NetFramework()
+            => MvcTemplate_IndividualAuthImpl("net471", false, true);
 
         [Fact(Skip = "https://github.com/aspnet/templating/issues/378")]
         public void MvcTemplate_IndividualAuth_Works_NetCore()
@@ -69,7 +91,7 @@ namespace Templates.Test
         public void MvcTemplate_IndividualAuth_UsingLocalDB_Works_NetCore()
             => MvcTemplate_IndividualAuthImpl(null, true);
 
-        private void MvcTemplate_IndividualAuthImpl(string targetFrameworkOverride, bool useLocalDB = false)
+        private void MvcTemplate_IndividualAuthImpl(string targetFrameworkOverride, bool useLocalDB = false, bool noHttps = false)
         {
             RunDotNetNew("mvc", targetFrameworkOverride, auth: "Individual", useLocalDB: useLocalDB);
 
@@ -83,6 +105,11 @@ namespace Templates.Test
                 Assert.Contains(".db", projectFileContents);
             }
             Assert.Contains("Microsoft.VisualStudio.Web.CodeGeneration.Design", projectFileContents);
+
+            if (targetFrameworkOverride != null)
+            {
+                Assert.Contains("Microsoft.AspNetCore.HttpsPolicy", projectFileContents);
+            }
 
             RunDotNetEfCreateMigration("mvc");
 
